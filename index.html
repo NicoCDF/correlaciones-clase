@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Laboratorio de Correlaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-grid: #0e1320;
+    --surface: #131820;
+    --surface-2: #1a2230;
+    --border: #1f2933;
+    --border-soft: #161e2a;
+    --text: #e6edf3;
+    --text-dim: #8b97a8;
+    --text-faint: #4a5563;
+    --accent: #00d4ff;
+    --accent-glow: rgba(0, 212, 255, 0.35);
+    --accent-soft: rgba(0, 212, 255, 0.08);
+    --positive: #4ade80;
+    --negative: #f472b6;
+    --neutral: #94a3b8;
+    --warning: #fbbf24;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(0,212,255,0.06), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(244,114,182,0.04), transparent 40%),
+      linear-gradient(var(--bg-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+  }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.18em;
+    color: var(--text-dim);
+    padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 100px; background: var(--surface);
+  }
+  .badge::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  /* PRESENTER */
+  .presenter {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 28px 36px;
+    gap: 24px;
+  }
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+  }
+  .header h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(28px, 3.5vw, 44px);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .header h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .header .subtitle {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-top: 6px;
+  }
+  .header .meta {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .header .meta span { color: var(--accent); }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 32px;
+    align-items: stretch;
+  }
+  .qr-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .qr-panel::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 30%, var(--accent-soft), transparent 60%);
+    pointer-events: none;
+  }
+  .qr-panel .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+  }
+  .qr-panel .title {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-style: italic;
+    font-weight: 400;
+    text-align: center;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .qr-wrap {
+    background: white;
+    padding: 14px;
+    border-radius: 4px;
+    position: relative;
+    z-index: 1;
+  }
+  .qr-wrap img { display: block; width: 240px; height: 240px; }
+  .qr-url {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    word-break: break-all;
+    text-align: center;
+    max-width: 100%;
+    line-height: 1.5;
+  }
+
+  .stage {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 16px;
+    min-width: 0;
+  }
+  .metrics {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 16px;
+  }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 22px;
+    position: relative;
+  }
+  .metric .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 6px;
+  }
+  .metric .value {
+    font-family: var(--font-display);
+    font-size: 56px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    font-variation-settings: "opsz" 144;
+  }
+  .metric.primary .value {
+    color: var(--accent);
+    text-shadow: 0 0 24px var(--accent-glow);
+    font-size: 72px;
+    font-weight: 400;
+  }
+  .metric .unit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+  }
+
+  .plot-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    position: relative;
+    min-height: 380px;
+    display: flex;
+    flex-direction: column;
+  }
+  .plot-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+  }
+  .plot-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+  .plot-legend {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-faint);
+  }
+  .plot-legend span { color: var(--text-dim); }
+  #scatter { flex: 1; width: 100%; display: block; }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 16px;
+  }
+  .controls .group-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-right: 8px;
+  }
+  .mode-btn, .action-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 9px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .mode-btn:hover, .action-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mode-btn.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .action-btn.danger {
+    margin-left: auto;
+    color: var(--text-faint);
+  }
+  .action-btn.danger:hover {
+    color: var(--negative);
+    border-color: var(--negative);
+  }
+
+  /* PARTICIPANT */
+  .participant {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .p-header {
+    text-align: center;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .p-header h1 {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: -0.01em;
+  }
+  .p-header h1 em {
+    color: var(--accent);
+    font-style: normal;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .p-header .sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-top: 10px;
+  }
+
+  .measure-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    padding: 32px 24px;
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s ease;
+    box-shadow: 0 0 0 0 var(--accent-glow);
+    position: relative;
+    overflow: hidden;
+  }
+  .measure-btn:active {
+    transform: scale(0.98);
+    box-shadow: 0 0 40px 0 var(--accent-glow);
+  }
+  .measure-btn:disabled {
+    background: var(--surface);
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+  .measure-btn .label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+
+  .last-result {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    margin-top: 20px;
+    text-align: center;
+  }
+  .last-result .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 10px;
+  }
+  .last-result .pair {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    font-family: var(--font-mono);
+  }
+  .last-result .reading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .last-result .reading-name {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 4px;
+  }
+  .last-result .reading-value {
+    font-family: var(--font-display);
+    font-size: 38px;
+    font-weight: 300;
+    color: var(--accent);
+  }
+
+  .p-stats {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px;
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .p-stat { text-align: center; }
+  .p-stat .label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 6px;
+  }
+  .p-stat .value {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 400;
+    color: var(--text);
+  }
+  .p-stat .value.accent { color: var(--accent); }
+
+  .p-mini-plot {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    margin-top: 20px;
+  }
+  .p-mini-plot .title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  #miniScatter { width: 100%; height: 200px; display: block; }
+
+  .footnote {
+    text-align: center;
+    margin-top: auto;
+    padding-top: 20px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    transition: transform 0.3s ease;
+    z-index: 100;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* CONFIG ERROR SCREEN */
+  .config-error {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .config-error-box {
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--warning);
+    border-radius: 4px;
+    padding: 40px;
+  }
+  .config-error h2 {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--warning);
+    margin-bottom: 16px;
+  }
+  .config-error p {
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .config-error code {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .config-error ol {
+    margin-left: 20px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+
+  @media (max-width: 900px) {
+    .presenter { padding: 16px; }
+    .main-grid { grid-template-columns: 1fr; }
+    .qr-panel { padding: 20px; }
+    .qr-wrap img { width: 200px; height: 200px; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .metric.primary { grid-column: 1 / -1; }
+    .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .header .meta { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, push, onValue, set, get, remove
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+// ============================================================
+// >>> CONFIGURACIÓN DE FIREBASE — REEMPLAZA ESTE BLOQUE <<<
+// ============================================================
+// Sigue las instrucciones que te dio Claude para crear tu
+// proyecto Firebase. Después de crear la Realtime Database,
+// copia tu config aquí y reemplaza este objeto entero.
+// ============================================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDxEnh44LL7VGEWGo-5pCtjbwS5sllt1f4",
+  authDomain: "correlaciones-clase.firebaseapp.com",
+  databaseURL: "https://correlaciones-clase-default-rtdb.firebaseio.com",
+  projectId: "correlaciones-clase",
+  storageBucket: "correlaciones-clase.firebasestorage.app",
+  messagingSenderId: "589786730823",
+  appId: "1:589786730823:web:b158b98b6b694505f23c62"
+};
+
+// ============================================================
+// Verificación: si la config no fue editada, mostrar instrucciones
+// ============================================================
+if (firebaseConfig.apiKey === "TU_API_KEY") {
+  document.getElementById('app').innerHTML = `
+    <div class="config-error">
+      <div class="config-error-box">
+        <h2>Falta configurar Firebase</h2>
+        <p>Este archivo necesita conectarse a tu propio proyecto Firebase para sincronizar las mediciones entre teléfonos. Aún no has pegado tu configuración.</p>
+        <p>Edita este archivo y reemplaza el bloque <code>firebaseConfig</code> (línea ~580) con la configuración de tu proyecto. Pasos:</p>
+        <ol>
+          <li>Ve a <code>console.firebase.google.com</code></li>
+          <li>Crea un proyecto nuevo</li>
+          <li>Crea una <strong>Realtime Database</strong> en modo de prueba</li>
+          <li>En Project Settings → Your apps → web app → SDK setup, copia el objeto <code>firebaseConfig</code></li>
+          <li>Pégalo aquí reemplazando los placeholders</li>
+        </ol>
+      </div>
+    </div>
+  `;
+  throw new Error("Firebase no configurado");
+}
+
+// ============================================================
+// INICIALIZAR FIREBASE
+// ============================================================
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+
+const measurementsRef = ref(db, 'lab/measurements');
+const configRef = ref(db, 'lab/config');
+
+// ============================================================
+// Identidad y modo
+// ============================================================
+const USER_ID = 'u_' + Math.random().toString(36).slice(2, 10);
+const params = new URLSearchParams(window.location.search);
+const isParticipant = params.get('p') === '1';
+
+// ============================================================
+// Inicializar config si no existe (solo presentador)
+// ============================================================
+async function ensureConfig() {
+  try {
+    const snap = await get(configRef);
+    if (!snap.exists()) {
+      await set(configRef, { mode: 'positive', resetAt: 0 });
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ============================================================
+// Generación de pares (A, B)
+// ============================================================
+function gauss(sigma) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+function generatePair(mode) {
+  const a = (Math.random() * 2) - 1;
+  let b;
+  if (mode === 'independent') {
+    b = (Math.random() * 2) - 1;
+  } else if (mode === 'positive') {
+    b = clamp(a + gauss(0.18), -1, 1);
+  } else if (mode === 'negative') {
+    b = clamp(-a + gauss(0.18), -1, 1);
+  } else if (mode === 'quantum') {
+    const sign = Math.random() < 0.5 ? 1 : -1;
+    const magnitude = 0.55 + Math.random() * 0.4;
+    const aQ = sign * magnitude + gauss(0.05);
+    const bQ = sign * magnitude + gauss(0.05);
+    return { a: clamp(aQ, -1, 1), b: clamp(bQ, -1, 1) };
+  } else {
+    b = (Math.random() * 2) - 1;
+  }
+  return { a, b };
+}
+
+// ============================================================
+// Estadística
+// ============================================================
+function pearson(points) {
+  const n = points.length;
+  if (n < 2) return 0;
+  let sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+  for (const p of points) {
+    sa += p.a; sb += p.b;
+    saa += p.a * p.a; sbb += p.b * p.b;
+    sab += p.a * p.b;
+  }
+  const num = n * sab - sa * sb;
+  const den = Math.sqrt((n * saa - sa * sa) * (n * sbb - sb * sb));
+  if (den === 0) return 0;
+  return num / den;
+}
+function formatRho(r) {
+  if (!isFinite(r)) return '—';
+  return (r >= 0 ? '+' : '') + r.toFixed(2);
+}
+
+// ============================================================
+// Convertir snapshot de Firebase → array filtrado por resetAt
+// ============================================================
+function snapshotToPoints(snapshot, resetAt) {
+  const val = snapshot.val();
+  if (!val) return [];
+  const arr = [];
+  for (const k of Object.keys(val)) {
+    const m = val[k];
+    if (m && typeof m.a === 'number' && typeof m.b === 'number' && m.ts >= (resetAt || 0)) {
+      arr.push(m);
+    }
+  }
+  arr.sort((a, b) => a.ts - b.ts);
+  return arr;
+}
+
+// ============================================================
+// Scatter plot (canvas)
+// ============================================================
+function drawScatter(canvas, points, opts = {}) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  canvas.width = Math.floor(rect.width * dpr);
+  canvas.height = Math.floor(rect.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const W = rect.width, H = rect.height;
+  const pad = opts.pad ?? 36;
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  const gridSteps = 10;
+  for (let i = 0; i <= gridSteps; i++) {
+    const x = pad + (W - 2*pad) * (i / gridSteps);
+    const y = pad + (H - 2*pad) * (i / gridSteps);
+    ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, H - pad); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  const cx = pad + (W - 2*pad) * 0.5;
+  const cy = pad + (H - 2*pad) * 0.5;
+  ctx.beginPath(); ctx.moveTo(pad, cy); ctx.lineTo(W - pad, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, pad); ctx.lineTo(cx, H - pad); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.strokeRect(pad, pad, W - 2*pad, H - 2*pad);
+
+  const small = opts.small;
+  ctx.fillStyle = 'rgba(139,151,168,0.8)';
+  ctx.font = `${small ? 9 : 11}px 'JetBrains Mono', monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillText('A', cx, H - pad + (small ? 14 : 20));
+  ctx.fillText('+1', W - pad, H - pad + (small ? 12 : 16));
+  ctx.fillText('−1', pad, H - pad + (small ? 12 : 16));
+  ctx.textAlign = 'right';
+  ctx.fillText('B', pad - (small ? 6 : 10), cy + 4);
+  ctx.fillText('+1', pad - 4, pad + 4);
+  ctx.fillText('−1', pad - 4, H - pad + 4);
+
+  const accent = opts.color || '#00d4ff';
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const px = pad + ((p.a + 1) / 2) * (W - 2*pad);
+    const py = pad + (1 - (p.b + 1) / 2) * (H - 2*pad);
+    const age = (points.length - 1 - i) / Math.max(1, points.length);
+    const alpha = 0.35 + 0.55 * (1 - age);
+    const r = small ? 2.5 : 3.5;
+    if (age < 0.05) {
+      ctx.beginPath();
+      ctx.fillStyle = accent + '33';
+      ctx.arc(px, py, r * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = alpha;
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ============================================================
+// PRESENTADOR
+// ============================================================
+function renderPresenter() {
+  const baseUrl = window.location.origin + window.location.pathname;
+  const participantUrl = baseUrl + '?p=1';
+  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=480x480&margin=0&data=' + encodeURIComponent(participantUrl);
+
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="presenter">
+      <div class="header">
+        <div>
+          <h1>Laboratorio de <em>correlaciones</em></h1>
+          <div class="subtitle">Demostración en vivo · Estadística de pares · ρ(A,B)</div>
+        </div>
+        <div class="meta">
+          <span class="badge">EN VIVO</span><br>
+          <span id="modeLabel">Modo: correlación positiva</span><br>
+          Firebase · <span>conectado</span>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <div class="qr-panel">
+          <div class="label">Para participar</div>
+          <div class="title">Escanea con<br>tu teléfono</div>
+          <div class="qr-wrap"><img src="${qrSrc}" alt="QR para participar"></div>
+          <div class="qr-url">${participantUrl}</div>
+        </div>
+
+        <div class="stage">
+          <div class="metrics">
+            <div class="metric primary">
+              <div class="label">Coeficiente de correlación</div>
+              <div class="value" id="rhoValue">+0.00</div>
+              <div class="unit">ρ ∈ [−1 , +1]</div>
+            </div>
+            <div class="metric">
+              <div class="label">Mediciones</div>
+              <div class="value" id="countValue">0</div>
+              <div class="unit">pares (A, B)</div>
+            </div>
+            <div class="metric">
+              <div class="label">Participantes</div>
+              <div class="value" id="participantsValue">0</div>
+              <div class="unit">dispositivos</div>
+            </div>
+          </div>
+
+          <div class="plot-panel">
+            <div class="plot-header">
+              <div class="plot-title">Diagrama de dispersión · (A, B)</div>
+              <div class="plot-legend"><span>cada punto = una medición</span></div>
+            </div>
+            <canvas id="scatter"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <span class="group-label">Modo de la fuente</span>
+        <button class="mode-btn" data-mode="independent">Independiente</button>
+        <button class="mode-btn" data-mode="positive">Correlación +</button>
+        <button class="mode-btn" data-mode="negative">Correlación −</button>
+        <button class="mode-btn" data-mode="quantum">«Cuántica»</button>
+        <button class="action-btn danger" id="resetBtn">Reiniciar datos</button>
+      </div>
+    </div>
+  `;
+
+  const canvas = document.getElementById('scatter');
+  const rhoEl = document.getElementById('rhoValue');
+  const countEl = document.getElementById('countValue');
+  const partEl = document.getElementById('participantsValue');
+  const modeLabelEl = document.getElementById('modeLabel');
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const modeNames = {
+    independent: 'sin correlación',
+    positive: 'correlación positiva',
+    negative: 'correlación negativa',
+    quantum: 'correlación «cuántica»'
+  };
+
+  let currentConfig = { mode: 'positive', resetAt: 0 };
+  let allPoints = [];
+
+  function setActiveMode(mode) {
+    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    modeLabelEl.textContent = 'Modo: ' + (modeNames[mode] || mode);
+  }
+
+  function updateDisplay() {
+    const r = pearson(allPoints);
+    rhoEl.textContent = formatRho(r);
+    rhoEl.style.color = r > 0.15 ? 'var(--positive)' : (r < -0.15 ? 'var(--negative)' : 'var(--accent)');
+    rhoEl.style.textShadow = `0 0 24px ${r > 0.15 ? 'rgba(74,222,128,0.45)' : (r < -0.15 ? 'rgba(244,114,182,0.45)' : 'var(--accent-glow)')}`;
+    countEl.textContent = allPoints.length;
+    const uids = new Set(allPoints.map(p => p.uid));
+    partEl.textContent = uids.size;
+    drawScatter(canvas, allPoints);
+  }
+
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await set(configRef, { ...currentConfig, mode: btn.dataset.mode });
+      } catch (e) { console.error(e); }
+    });
+  });
+
+  resetBtn.addEventListener('click', async () => {
+    if (!confirm('¿Reiniciar todas las mediciones?')) return;
+    try {
+      const newConfig = { ...currentConfig, resetAt: Date.now() };
+      await set(configRef, newConfig);
+      await remove(measurementsRef);
+    } catch (e) { console.error(e); }
+  });
+
+  // Suscripciones en tiempo real
+  ensureConfig();
+
+  onValue(configRef, (snap) => {
+    const v = snap.val();
+    if (v) {
+      currentConfig = { mode: v.mode || 'positive', resetAt: v.resetAt || 0 };
+      setActiveMode(currentConfig.mode);
+      allPoints = allPoints.filter(p => p.ts >= currentConfig.resetAt);
+      updateDisplay();
+    }
+  });
+
+  onValue(measurementsRef, (snap) => {
+    allPoints = snapshotToPoints(snap, currentConfig.resetAt);
+    updateDisplay();
+  });
+
+  window.addEventListener('resize', () => drawScatter(canvas, allPoints));
+}
+
+// ============================================================
+// PARTICIPANTE
+// ============================================================
+function renderParticipant() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="participant">
+      <div class="p-header">
+        <h1>Mide un par <em>(A, B)</em></h1>
+        <div class="sub">Tu teléfono · Una medición a la vez</div>
+      </div>
+
+      <button class="measure-btn" id="measureBtn">
+        <span class="label">Toca aquí</span>
+        MEDIR
+      </button>
+
+      <div class="last-result" id="lastResult" style="display:none">
+        <div class="label">Tu última medición</div>
+        <div class="pair">
+          <div class="reading">
+            <div class="reading-name">A</div>
+            <div class="reading-value" id="lastA">—</div>
+          </div>
+          <div class="reading">
+            <div class="reading-name">B</div>
+            <div class="reading-value" id="lastB">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-stats">
+        <div class="p-stat">
+          <div class="label">Tus mediciones</div>
+          <div class="value" id="myCount">0</div>
+        </div>
+        <div class="p-stat">
+          <div class="label">Total grupo</div>
+          <div class="value accent" id="totalCount">0</div>
+        </div>
+      </div>
+
+      <div class="p-mini-plot">
+        <div class="title">Correlación del grupo · ρ = <span id="miniRho">—</span></div>
+        <canvas id="miniScatter"></canvas>
+      </div>
+
+      <div class="footnote">Demostración pedagógica · Firebase Realtime DB</div>
+    </div>
+    <div class="toast" id="toast"></div>
+  `;
+
+  const btn = document.getElementById('measureBtn');
+  const lastResultEl = document.getElementById('lastResult');
+  const lastA = document.getElementById('lastA');
+  const lastB = document.getElementById('lastB');
+  const myCountEl = document.getElementById('myCount');
+  const totalCountEl = document.getElementById('totalCount');
+  const miniRho = document.getElementById('miniRho');
+  const miniCanvas = document.getElementById('miniScatter');
+  const toast = document.getElementById('toast');
+
+  let currentConfig = { mode: 'positive', resetAt: 0 };
+  let allPoints = [];
+  let myCount = 0;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+
+  function updateDisplay() {
+    totalCountEl.textContent = allPoints.length;
+    myCountEl.textContent = myCount;
+    const r = pearson(allPoints);
+    miniRho.textContent = formatRho(r);
+    miniRho.style.color = r > 0.15 ? 'var(--positive)' : (r < -0.15 ? 'var(--negative)' : 'var(--accent)');
+    drawScatter(miniCanvas, allPoints, { pad: 24, small: true,
+      color: r > 0.15 ? '#4ade80' : (r < -0.15 ? '#f472b6' : '#00d4ff') });
+  }
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const { a, b } = generatePair(currentConfig.mode);
+      const m = { ts: Date.now(), a, b, uid: USER_ID };
+      await push(measurementsRef, m);
+      lastA.textContent = (a >= 0 ? '+' : '') + a.toFixed(2);
+      lastB.textContent = (b >= 0 ? '+' : '') + b.toFixed(2);
+      lastResultEl.style.display = 'block';
+      if (navigator.vibrate) navigator.vibrate(30);
+    } catch (err) {
+      console.error(err);
+      showToast('Error de conexión');
+    } finally {
+      setTimeout(() => { btn.disabled = false; }, 250);
+    }
+  });
+
+  onValue(configRef, (snap) => {
+    const v = snap.val();
+    if (v) {
+      currentConfig = { mode: v.mode || 'positive', resetAt: v.resetAt || 0 };
+      allPoints = allPoints.filter(p => p.ts >= currentConfig.resetAt);
+      myCount = allPoints.filter(p => p.uid === USER_ID).length;
+      updateDisplay();
+    }
+  });
+
+  onValue(measurementsRef, (snap) => {
+    allPoints = snapshotToPoints(snap, currentConfig.resetAt);
+    myCount = allPoints.filter(p => p.uid === USER_ID).length;
+    updateDisplay();
+  });
+
+  window.addEventListener('resize', () => drawScatter(miniCanvas, allPoints, { pad: 24, small: true }));
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+if (isParticipant) renderParticipant();
+else renderPresenter();
+</script>
+</body>
+</html>
