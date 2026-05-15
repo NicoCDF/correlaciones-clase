@@ -712,7 +712,6 @@ const firebaseConfig = {
   messagingSenderId: "589786730823",
   appId: "1:589786730823:web:b158b98b6b694505f23c62"
 };
-
 if (firebaseConfig.apiKey === "TU_API_KEY") {
   document.getElementById('app').innerHTML = `
     <div class="config-error">
@@ -761,20 +760,32 @@ function switchGroup() {
 }
 
 // ============================================================
-// Generación de pares — todos los modos producen ±1
+// Generación de pares
+// Clásicos/independientes: continuos en [-1, +1]
+// Cuánticos: discretos ±1
 // ============================================================
 function randSign() { return Math.random() < 0.5 ? 1 : -1; }
+function gauss(sigma) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+function isQuantumMode(mode) {
+  return mode === 'quantum_pos' || mode === 'quantum_neg';
+}
 
 function generatePair(mode) {
   if (mode === 'independent') {
-    return { a: randSign(), b: randSign() };
+    return { a: Math.random() * 2 - 1, b: Math.random() * 2 - 1 };
   } else if (mode === 'classical_pos') {
-    // Correlación clásica con ruido: 85% del tiempo coinciden
-    const a = randSign();
-    return { a, b: Math.random() < 0.85 ? a : -a };
+    const a = Math.random() * 2 - 1;
+    return { a, b: clamp(a + gauss(0.18), -1, 1) };
   } else if (mode === 'classical_neg') {
-    const a = randSign();
-    return { a, b: Math.random() < 0.85 ? -a : a };
+    const a = Math.random() * 2 - 1;
+    return { a, b: clamp(-a + gauss(0.18), -1, 1) };
   } else if (mode === 'quantum_pos') {
     // Estado de Bell |Φ+⟩: idénticos siempre
     const a = randSign();
@@ -835,33 +846,48 @@ function parsePairs(snapshot, resetAt) {
 }
 
 // ============================================================
-// Lógica de medición: claim de un par o crear uno nuevo
+// Lógica de medición
+// Clásico/independiente: el participante genera un par completo localmente
+// Cuántico: se reclama un lado de un par entrelazado (sistema dos estaciones)
 // ============================================================
 async function performMeasurement(group, mode) {
+  // En modos clásicos: el participante genera el par completo
+  if (!isQuantumMode(mode)) {
+    const { a, b } = generatePair(mode);
+    const newPair = {
+      a, b,
+      aClaimedBy: USER_ID,
+      bClaimedBy: USER_ID,
+      aClaimedAt: Date.now(),
+      bClaimedAt: Date.now(),
+      createdAt: Date.now()
+    };
+    await push(pairsRef, newPair);
+    return { a, b, isQuantum: false };
+  }
+
+  // En modos cuánticos: claim de un lado
   const myField = group === 'A' ? 'aClaimedBy' : 'bClaimedBy';
   const myAtField = group === 'A' ? 'aClaimedAt' : 'bClaimedAt';
-  const otherField = group === 'A' ? 'bClaimedBy' : 'aClaimedBy';
 
-  // Cargar pares actuales
   const snap = await get(pairsRef);
   const all = parsePairs(snap, 0);
 
-  // Buscar un par cuyo lado mío esté libre y el otro lado no sea mío
-  const candidates = all.filter(p => !p[myField] && p[otherField] !== USER_ID);
+  const candidates = all.filter(p => !p[myField]);
 
   for (const cand of candidates) {
     const pRef = ref(db, `lab/pairs/${cand.id}`);
     const tx = await runTransaction(pRef, (current) => {
       if (!current) return;
       if (current[myField]) return;
-      if (current[otherField] === USER_ID) return;
       current[myField] = USER_ID;
       current[myAtField] = Date.now();
       return current;
     });
     if (tx.committed && tx.snapshot.exists()) {
       const v = tx.snapshot.val();
-      return group === 'A' ? v.a : v.b;
+      const val = group === 'A' ? v.a : v.b;
+      return { a: val, b: null, isQuantum: true, group };
     }
   }
 
@@ -876,11 +902,14 @@ async function performMeasurement(group, mode) {
     createdAt: Date.now()
   };
   await push(pairsRef, newPair);
-  return group === 'A' ? a : b;
+  const val = group === 'A' ? a : b;
+  return { a: val, b: null, isQuantum: true, group };
 }
 
 // ============================================================
-// Scatter plot con buckets en las 4 esquinas (valores ±1)
+// Scatter unificado: bucketing inteligente
+// - Datos continuos (modos clásicos): puntos pequeños, forman diagonal suave
+// - Datos discretos (modos cuánticos): se acumulan en 2 o 4 esquinas con conteo grande
 // ============================================================
 function drawScatter(canvas, pairs) {
   const ctx = canvas.getContext('2d');
@@ -915,72 +944,77 @@ function drawScatter(canvas, pairs) {
   ctx.fillStyle = 'rgba(139,151,168,0.85)';
   ctx.font = '11px JetBrains Mono, monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('Espín A', cx, H - pad + 22);
+  ctx.fillText('A', cx, H - pad + 22);
   ctx.fillText('+1', W - pad, H - pad + 16);
   ctx.fillText('−1', pad, H - pad + 16);
   ctx.save();
   ctx.translate(pad - 28, cy);
   ctx.rotate(-Math.PI/2);
-  ctx.fillText('Espín B', 0, 0);
+  ctx.fillText('B', 0, 0);
   ctx.restore();
   ctx.textAlign = 'right';
   ctx.fillText('+1', pad - 6, pad + 4);
   ctx.fillText('−1', pad - 6, H - pad + 4);
 
-  function pos(a, b) {
-    return {
-      x: pad + ((a + 1) / 2) * (W - 2*pad),
-      y: pad + (1 - (b + 1) / 2) * (H - 2*pad)
-    };
-  }
-
-  // Contar pares en cada esquina
-  const counts = { '1,1': 0, '1,-1': 0, '-1,1': 0, '-1,-1': 0 };
+  // Bucketing: puntos cercanos se agrupan
+  const cellSize = 10;
+  const buckets = new Map();
   for (const p of pairs) {
-    const ka = p.a > 0 ? 1 : -1;
-    const kb = p.b > 0 ? 1 : -1;
-    counts[`${ka},${kb}`]++;
+    const px = pad + ((p.a + 1) / 2) * (W - 2*pad);
+    const py = pad + (1 - (p.b + 1) / 2) * (H - 2*pad);
+    const bx = Math.round(px / cellSize) * cellSize;
+    const by = Math.round(py / cellSize) * cellSize;
+    const key = bx + ',' + by;
+    if (!buckets.has(key)) {
+      buckets.set(key, { x: bx, y: by, count: 0, a: p.a, b: p.b });
+    }
+    buckets.get(key).count++;
   }
 
-  const maxCount = Math.max(...Object.values(counts), 1);
-  const maxR = Math.min(W, H) * 0.16;
-  const minR = 10;
+  // Renderizar buckets, los más pequeños primero
+  const sortedBuckets = Array.from(buckets.values()).sort((x, y) => x.count - y.count);
+  const totalPoints = pairs.length;
 
-  for (const key of Object.keys(counts)) {
-    const c = counts[key];
-    if (c === 0) continue;
-    const [a, b] = key.split(',').map(Number);
-    const { x, y } = pos(a, b);
-    // Radio relativo al máximo (sqrt para que crezca menos agresivo)
-    const r = minR + Math.sqrt(c / maxCount) * (maxR - minR);
-    const isCorrelated = a === b;
+  for (const b of sortedBuckets) {
+    const isCorrelated = b.a * b.b >= 0;
     const color = isCorrelated ? '#4ade80' : '#f472b6';
-    const glow = isCorrelated ? 'rgba(74,222,128,0.4)' : 'rgba(244,114,182,0.4)';
+    const glowColor = isCorrelated ? 'rgba(74,222,128,0.4)' : 'rgba(244,114,182,0.4)';
 
-    // Glow
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
-    grad.addColorStop(0, glow);
-    grad.addColorStop(1, 'transparent');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
-
-    // Círculo principal
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-
-    // Número adentro
-    if (r >= 14) {
-      ctx.fillStyle = 'rgba(10, 14, 20, 0.9)';
-      ctx.font = `bold ${Math.min(r * 0.95, 30)}px Fraunces, serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(c.toString(), x, y + 2);
+    if (b.count < 5) {
+      // Punto pequeño individual (modo continuo)
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.55 + Math.min(0.4, b.count * 0.08);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     } else {
-      ctx.fillStyle = 'rgba(230, 237, 243, 0.8)';
-      ctx.font = '11px JetBrains Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(c.toString(), x, y - r - 10);
+      // Cluster grande: círculo escalado por sqrt(count)
+      const r = Math.min(Math.min(W, H) * 0.16, 10 + Math.sqrt(b.count) * 4.5);
+
+      // Glow exterior
+      const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r * 2);
+      grad.addColorStop(0, glowColor);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, r * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Círculo principal
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Número dentro
+      if (r >= 14) {
+        ctx.fillStyle = 'rgba(10, 14, 20, 0.92)';
+        ctx.font = `bold ${Math.min(r * 0.9, 30)}px Fraunces, serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(b.count.toString(), b.x, b.y + 2);
+      }
     }
   }
 }
@@ -1051,6 +1085,7 @@ function renderPresenter() {
               <div class="label">Pares completos</div>
               <div class="value" id="pairsValue">0</div>
               <div class="sub" id="participantsValue">0 participantes</div>
+              <div class="sub" id="pendingValue" style="color: var(--warning); margin-top: 4px;"></div>
             </div>
           </div>
 
@@ -1154,6 +1189,16 @@ function renderPresenter() {
     else { rhoEl.style.color = 'var(--accent)'; rhoEl.style.textShadow = '0 0 24px var(--accent-glow)'; }
 
     pairsEl.textContent = completePairs.length;
+
+    // Pares pendientes (faltando un lado)
+    const pendingA = allPairs.filter(p => p.aClaimedBy && !p.bClaimedBy).length;
+    const pendingB = allPairs.filter(p => !p.aClaimedBy && p.bClaimedBy).length;
+    const pendingEl = document.getElementById('pendingValue');
+    if (pendingA + pendingB > 0) {
+      pendingEl.textContent = `Pendientes · A: ${pendingA} · B: ${pendingB}`;
+    } else {
+      pendingEl.textContent = '';
+    }
 
     const aParts = new Set(allPairs.filter(p => p.aClaimedBy).map(p => p.aClaimedBy));
     const bParts = new Set(allPairs.filter(p => p.bClaimedBy).map(p => p.bClaimedBy));
@@ -1299,9 +1344,22 @@ function renderParticipant() {
       lastResultEl.classList.remove('empty');
       const arrow = lastResultEl.querySelector('.arrow');
       const val = lastResultEl.querySelector('.value');
-      arrow.className = 'arrow ' + (result > 0 ? 'up' : 'down');
-      arrow.textContent = result > 0 ? '↑' : '↓';
-      val.textContent = result > 0 ? '+1' : '−1';
+
+      if (result.isQuantum) {
+        // Modo cuántico: muestra una flecha del lado de su estación
+        arrow.className = 'arrow ' + (result.a > 0 ? 'up' : 'down');
+        arrow.textContent = result.a > 0 ? '↑' : '↓';
+        val.textContent = result.a > 0 ? '+1' : '−1';
+      } else {
+        // Modo clásico: muestra ambos valores A y B
+        arrow.className = 'arrow';
+        arrow.style.fontSize = '24px';
+        arrow.innerHTML = `<span style="color: var(--station-a)">A = ${result.a >= 0 ? '+' : ''}${result.a.toFixed(2)}</span>` +
+                          `<span style="color: var(--text-faint); margin: 0 12px">·</span>` +
+                          `<span style="color: var(--station-b)">B = ${result.b >= 0 ? '+' : ''}${result.b.toFixed(2)}</span>`;
+        val.textContent = '';
+      }
+
       if (navigator.vibrate) navigator.vibrate(30);
     } catch (err) {
       console.error(err);
@@ -1338,6 +1396,24 @@ function renderParticipant() {
     if (v) {
       currentConfig = { mode: v.mode || 'quantum_pos', resetAt: v.resetAt || 0 };
       modeInfoEl.textContent = modeNames[currentConfig.mode] || currentConfig.mode;
+
+      // Mostrar/ocultar header de estación según modo
+      const stationHeader = document.querySelector('.station-header');
+      const measureBtn = document.querySelector('.measure-btn');
+      if (isQuantumMode(currentConfig.mode)) {
+        if (stationHeader) stationHeader.style.display = '';
+        if (measureBtn) {
+          measureBtn.className = 'measure-btn ' + groupClass;
+          measureBtn.querySelector('.label').textContent = 'Toca para medir';
+        }
+      } else {
+        if (stationHeader) stationHeader.style.display = 'none';
+        if (measureBtn) {
+          measureBtn.className = 'measure-btn is-a';
+          measureBtn.querySelector('.label').textContent = 'Toca para generar un par';
+        }
+      }
+
       allPairs = allPairs.filter(p => p.createdAt >= currentConfig.resetAt);
       updateDisplay();
     }
