@@ -288,6 +288,118 @@
   .plot-legend .dot.anti { background: var(--negative); box-shadow: 0 0 6px rgba(244,114,182,0.4); }
   #scatter { flex: 1; width: 100%; display: block; }
 
+  /* ============ COUNT DISPLAY (modo cuántico) ============ */
+  .count-display {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 12px 4px 4px 4px;
+  }
+  .count-row {
+    display: grid;
+    grid-template-columns: 180px 1fr 100px;
+    align-items: center;
+    gap: 16px;
+  }
+  .count-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    line-height: 1.4;
+  }
+  .count-label .formula {
+    color: var(--text-faint);
+    font-size: 10px;
+    display: block;
+    margin-top: 2px;
+  }
+  .count-bar-wrap {
+    height: 36px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .count-bar {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    transition: width 0.4s ease-out;
+    background: var(--positive);
+    box-shadow: 0 0 16px rgba(74,222,128,0.4);
+  }
+  .count-bar.opp {
+    background: var(--negative);
+    box-shadow: 0 0 16px rgba(244,114,182,0.4);
+  }
+  .count-bar-inner {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    padding-left: 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: rgba(10, 14, 20, 0.9);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  .count-bar-inner.empty {
+    color: var(--text-faint);
+  }
+  .count-value {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 400;
+    text-align: right;
+    line-height: 1;
+    font-variation-settings: "opsz" 144;
+  }
+  .count-value .pct {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 4px;
+    letter-spacing: 0.1em;
+  }
+  .count-value.same { color: var(--positive); }
+  .count-value.opp { color: var(--negative); }
+
+  .count-formula {
+    margin-top: auto;
+    padding: 16px 18px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+  .count-formula .eq {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--accent);
+    margin-left: 6px;
+    font-weight: 400;
+    font-variation-settings: "opsz" 144;
+  }
+  .count-total {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 2px;
+  }
+  .count-total span { color: var(--accent); font-size: 14px; }
+
   .station-panels {
     display: grid;
     grid-template-rows: 1fr 1fr;
@@ -712,6 +824,7 @@ const firebaseConfig = {
   messagingSenderId: "589786730823",
   appId: "1:589786730823:web:b158b98b6b694505f23c62"
 };
+
 if (firebaseConfig.apiKey === "TU_API_KEY") {
   document.getElementById('app').innerHTML = `
     <div class="config-error">
@@ -1091,13 +1204,50 @@ function renderPresenter() {
 
           <div class="plot-panel">
             <div class="plot-header">
-              <div class="plot-title">Distribución conjunta · pares (espín_A , espín_B)</div>
-              <div class="plot-legend">
+              <div class="plot-title" id="plotTitle">Distribución conjunta · pares (espín_A , espín_B)</div>
+              <div class="plot-legend" id="plotLegend">
                 <span><span class="dot match"></span>coinciden</span>
                 <span><span class="dot anti"></span>opuestos</span>
               </div>
             </div>
             <canvas id="scatter"></canvas>
+            <div class="count-display" id="countDisplay" style="display:none">
+              <div class="count-total">N total = <span id="ctTotal">0</span> pares</div>
+
+              <div class="count-row">
+                <div class="count-label">
+                  Coinciden
+                  <span class="formula">(↑↑ o ↓↓)</span>
+                </div>
+                <div class="count-bar-wrap">
+                  <div class="count-bar" id="ctBarSame" style="width: 0%"></div>
+                  <div class="count-bar-inner empty" id="ctBarSameLabel">—</div>
+                </div>
+                <div class="count-value same">
+                  <span id="ctSameN">0</span>
+                  <span class="pct" id="ctSamePct">0%</span>
+                </div>
+              </div>
+
+              <div class="count-row">
+                <div class="count-label">
+                  Opuestos
+                  <span class="formula">(↑↓ o ↓↑)</span>
+                </div>
+                <div class="count-bar-wrap">
+                  <div class="count-bar opp" id="ctBarOpp" style="width: 0%"></div>
+                  <div class="count-bar-inner empty" id="ctBarOppLabel">—</div>
+                </div>
+                <div class="count-value opp">
+                  <span id="ctOppN">0</span>
+                  <span class="pct" id="ctOppPct">0%</span>
+                </div>
+              </div>
+
+              <div class="count-formula">
+                E(A,B) = P<sub>coinciden</sub> − P<sub>opuestos</sub> = <span class="eq" id="ctEab">+0.00</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1161,6 +1311,18 @@ function renderPresenter() {
   function setActiveMode(mode) {
     modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
     modeLabelEl.textContent = modeNames[mode] || mode;
+    // Ocultar paneles de estaciones en modo clásico (no aplican)
+    const stationPanels = document.querySelector('.station-panels');
+    if (stationPanels) {
+      stationPanels.style.display = isQuantumMode(mode) ? '' : 'none';
+    }
+    // Ajustar grid: si las estaciones están ocultas, el centro ocupa más espacio
+    const mainGrid = document.querySelector('.main-grid');
+    if (mainGrid) {
+      mainGrid.style.gridTemplateColumns = isQuantumMode(mode)
+        ? '300px 1fr 300px'
+        : '300px 1fr';
+    }
   }
 
   function marginalText(values) {
@@ -1213,7 +1375,69 @@ function renderPresenter() {
     marginalAEl.innerHTML = marginalText(aValues);
     marginalBEl.innerHTML = marginalText(bValues);
 
-    drawScatter(canvas, completePairs);
+    // ===== Toggle scatter vs count display según el modo =====
+    const isQuantum = isQuantumMode(currentConfig.mode);
+    const scatterEl = document.getElementById('scatter');
+    const countDispEl = document.getElementById('countDisplay');
+    const plotTitleEl = document.getElementById('plotTitle');
+    const plotLegendEl = document.getElementById('plotLegend');
+
+    if (isQuantum) {
+      scatterEl.style.display = 'none';
+      countDispEl.style.display = 'flex';
+      plotTitleEl.textContent = 'Mediciones de pares · conteo';
+      plotLegendEl.style.display = 'none';
+      updateCountDisplay(completePairs);
+    } else {
+      scatterEl.style.display = 'block';
+      countDispEl.style.display = 'none';
+      plotTitleEl.textContent = 'Distribución conjunta · pares (A , B)';
+      plotLegendEl.style.display = '';
+      drawScatter(scatterEl, completePairs);
+    }
+  }
+
+  function updateCountDisplay(pairs) {
+    const total = pairs.length;
+    let same = 0, opp = 0;
+    for (const p of pairs) {
+      if (p.a * p.b >= 0) same++;
+      else opp++;
+    }
+    const pSame = total > 0 ? same / total : 0;
+    const pOpp = total > 0 ? opp / total : 0;
+    const eab = pSame - pOpp;
+
+    document.getElementById('ctTotal').textContent = total;
+    document.getElementById('ctSameN').textContent = same;
+    document.getElementById('ctOppN').textContent = opp;
+    document.getElementById('ctSamePct').textContent = `${Math.round(pSame * 100)}%`;
+    document.getElementById('ctOppPct').textContent = `${Math.round(pOpp * 100)}%`;
+
+    const barSame = document.getElementById('ctBarSame');
+    const barOpp = document.getElementById('ctBarOpp');
+    barSame.style.width = total > 0 ? `${pSame * 100}%` : '0%';
+    barOpp.style.width = total > 0 ? `${pOpp * 100}%` : '0%';
+
+    const labelSame = document.getElementById('ctBarSameLabel');
+    const labelOpp = document.getElementById('ctBarOppLabel');
+    if (total === 0) {
+      labelSame.textContent = '—';
+      labelSame.className = 'count-bar-inner empty';
+      labelOpp.textContent = '—';
+      labelOpp.className = 'count-bar-inner empty';
+    } else {
+      labelSame.textContent = pSame >= 0.08 ? `${Math.round(pSame * 100)}%` : '';
+      labelSame.className = 'count-bar-inner';
+      labelOpp.textContent = pOpp >= 0.08 ? `${Math.round(pOpp * 100)}%` : '';
+      labelOpp.className = 'count-bar-inner';
+    }
+
+    const eabEl = document.getElementById('ctEab');
+    eabEl.textContent = total > 0 ? (eab >= 0 ? '+' : '') + eab.toFixed(2) : '—';
+    if (eab > 0.15) { eabEl.style.color = 'var(--positive)'; }
+    else if (eab < -0.15) { eabEl.style.color = 'var(--negative)'; }
+    else { eabEl.style.color = 'var(--accent)'; }
   }
 
   modeBtns.forEach(btn => {
@@ -1397,21 +1621,26 @@ function renderParticipant() {
       currentConfig = { mode: v.mode || 'quantum_pos', resetAt: v.resetAt || 0 };
       modeInfoEl.textContent = modeNames[currentConfig.mode] || currentConfig.mode;
 
-      // Mostrar/ocultar header de estación según modo
+      // Mostrar/ocultar header de estación y stream según modo
       const stationHeader = document.querySelector('.station-header');
       const measureBtn = document.querySelector('.measure-btn');
+      const myStream = document.querySelector('.my-stream');
+      const groupRhoStat = groupRhoEl.parentElement;
+
       if (isQuantumMode(currentConfig.mode)) {
         if (stationHeader) stationHeader.style.display = '';
         if (measureBtn) {
           measureBtn.className = 'measure-btn ' + groupClass;
           measureBtn.querySelector('.label').textContent = 'Toca para medir';
         }
+        if (myStream) myStream.style.display = '';
       } else {
         if (stationHeader) stationHeader.style.display = 'none';
         if (measureBtn) {
           measureBtn.className = 'measure-btn is-a';
           measureBtn.querySelector('.label').textContent = 'Toca para generar un par';
         }
+        if (myStream) myStream.style.display = 'none';
       }
 
       allPairs = allPairs.filter(p => p.createdAt >= currentConfig.resetAt);
