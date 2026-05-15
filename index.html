@@ -308,22 +308,6 @@
     padding-bottom: 20px;
     border-bottom: 1px solid var(--border);
   }
-  
-  /* NEW GROUP BADGES */
-  .group-badge {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 100px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 14px;
-  }
-  .group-a { background: rgba(0, 212, 255, 0.1); color: #00d4ff; border: 1px solid #00d4ff; }
-  .group-b { background: rgba(244, 114, 182, 0.1); color: #f472b6; border: 1px solid #f472b6; }
-
   .p-header h1 {
     font-family: var(--font-display);
     font-size: 28px;
@@ -363,16 +347,9 @@
     position: relative;
     overflow: hidden;
   }
-  .measure-btn.btn-b {
-    background: var(--negative);
-    box-shadow: 0 0 0 0 rgba(244,114,182,0.35);
-  }
   .measure-btn:active {
     transform: scale(0.98);
     box-shadow: 0 0 40px 0 var(--accent-glow);
-  }
-  .measure-btn.btn-b:active {
-    box-shadow: 0 0 40px 0 rgba(244,114,182,0.35);
   }
   .measure-btn:disabled {
     background: var(--surface);
@@ -405,11 +382,29 @@
     letter-spacing: 0.2em;
     margin-bottom: 10px;
   }
+  .last-result .pair {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    font-family: var(--font-mono);
+  }
+  .last-result .reading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .last-result .reading-name {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 4px;
+  }
   .last-result .reading-value {
     font-family: var(--font-display);
-    font-size: 48px;
+    font-size: 38px;
     font-weight: 300;
-    color: var(--text);
+    color: var(--accent);
   }
 
   .p-stats {
@@ -486,6 +481,7 @@
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  /* CONFIG ERROR SCREEN */
   .config-error {
     min-height: 100vh;
     display: flex;
@@ -521,6 +517,11 @@
     border-radius: 3px;
     font-size: 12px;
   }
+  .config-error ol {
+    margin-left: 20px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
 
   @media (max-width: 900px) {
     .presenter { padding: 16px; }
@@ -541,12 +542,17 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getDatabase, ref, push, onValue, set, get, remove, runTransaction
+  getDatabase, ref, push, onValue, set, get, remove
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 // ============================================================
-// >>> CONFIGURACIÓN DE FIREBASE <<<
+// >>> CONFIGURACIÓN DE FIREBASE — REEMPLAZA ESTE BLOQUE <<<
 // ============================================================
+// Sigue las instrucciones que te dio Claude para crear tu
+// proyecto Firebase. Después de crear la Realtime Database,
+// copia tu config aquí y reemplaza este objeto entero.
+// ============================================================
+
 const firebaseConfig = {
   apiKey: "AIzaSyDxEnh44LL7VGEWGo-5pCtjbwS5sllt1f4",
   authDomain: "correlaciones-clase.firebaseapp.com",
@@ -557,6 +563,32 @@ const firebaseConfig = {
   appId: "1:589786730823:web:b158b98b6b694505f23c62"
 };
 
+// ============================================================
+// Verificación: si la config no fue editada, mostrar instrucciones
+// ============================================================
+if (firebaseConfig.apiKey === "TU_API_KEY") {
+  document.getElementById('app').innerHTML = `
+    <div class="config-error">
+      <div class="config-error-box">
+        <h2>Falta configurar Firebase</h2>
+        <p>Este archivo necesita conectarse a tu propio proyecto Firebase para sincronizar las mediciones entre teléfonos. Aún no has pegado tu configuración.</p>
+        <p>Edita este archivo y reemplaza el bloque <code>firebaseConfig</code> (línea ~580) con la configuración de tu proyecto. Pasos:</p>
+        <ol>
+          <li>Ve a <code>console.firebase.google.com</code></li>
+          <li>Crea un proyecto nuevo</li>
+          <li>Crea una <strong>Realtime Database</strong> en modo de prueba</li>
+          <li>En Project Settings → Your apps → web app → SDK setup, copia el objeto <code>firebaseConfig</code></li>
+          <li>Pégalo aquí reemplazando los placeholders</li>
+        </ol>
+      </div>
+    </div>
+  `;
+  throw new Error("Firebase no configurado");
+}
+
+// ============================================================
+// INICIALIZAR FIREBASE
+// ============================================================
 const fbApp = initializeApp(firebaseConfig);
 const db = getDatabase(fbApp);
 
@@ -571,7 +603,19 @@ const params = new URLSearchParams(window.location.search);
 const isParticipant = params.get('p') === '1';
 
 // ============================================================
-// Generación de pares (A, B) de la fuente central
+// Inicializar config si no existe (solo presentador)
+// ============================================================
+async function ensureConfig() {
+  try {
+    const snap = await get(configRef);
+    if (!snap.exists()) {
+      await set(configRef, { mode: 'positive', resetAt: 0 });
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ============================================================
+// Generación de pares (A, B)
 // ============================================================
 function gauss(sigma) {
   let u = 0, v = 0;
@@ -601,27 +645,6 @@ function generatePair(mode) {
   return { a, b };
 }
 
-// Inicializar un 'pool' de partículas entrelazadas en la base de datos
-async function initSourcePool(mode) {
-  const pool = [];
-  for (let i = 0; i < 1000; i++) {
-    pool.push(generatePair(mode));
-  }
-  await set(ref(db, 'lab/source'), pool);
-  await set(ref(db, 'lab/counters'), { A: 0, B: 0 });
-  await remove(measurementsRef);
-}
-
-async function ensureConfig() {
-  try {
-    const snap = await get(configRef);
-    if (!snap.exists()) {
-      await set(configRef, { mode: 'quantum', resetAt: Date.now() });
-      await initSourcePool('quantum');
-    }
-  } catch (e) { console.error(e); }
-}
-
 // ============================================================
 // Estadística
 // ============================================================
@@ -645,35 +668,16 @@ function formatRho(r) {
 }
 
 // ============================================================
-// Emparejar mediciones separadas (A y B) por índice
+// Convertir snapshot de Firebase → array filtrado por resetAt
 // ============================================================
-function parseCompletedPairs(snapshot) {
+function snapshotToPoints(snapshot, resetAt) {
   const val = snapshot.val();
   if (!val) return [];
-  const pairsMap = {};
-  
-  for (const k of Object.keys(val)) {
-    const parts = k.split('_');
-    if (parts.length !== 2) continue;
-    const group = parts[0]; 
-    const idx = parts[1];
-    
-    if (!pairsMap[idx]) pairsMap[idx] = {};
-    pairsMap[idx][group] = val[k];
-  }
-  
   const arr = [];
-  for (const idx in pairsMap) {
-    const pair = pairsMap[idx];
-    // Solo mostramos el punto si AMBOS grupos midieron esta partícula
-    if (pair.A && pair.B) {
-      arr.push({
-        a: pair.A.val,
-        b: pair.B.val,
-        ts: Math.max(pair.A.ts, pair.B.ts),
-        uidA: pair.A.uid,
-        uidB: pair.B.uid
-      });
+  for (const k of Object.keys(val)) {
+    const m = val[k];
+    if (m && typeof m.a === 'number' && typeof m.b === 'number' && m.ts >= (resetAt || 0)) {
+      arr.push(m);
     }
   }
   arr.sort((a, b) => a.ts - b.ts);
@@ -718,11 +722,11 @@ function drawScatter(canvas, points, opts = {}) {
   ctx.fillStyle = 'rgba(139,151,168,0.8)';
   ctx.font = `${small ? 9 : 11}px 'JetBrains Mono', monospace`;
   ctx.textAlign = 'center';
-  ctx.fillText('Alice (A)', cx, H - pad + (small ? 14 : 20));
+  ctx.fillText('A', cx, H - pad + (small ? 14 : 20));
   ctx.fillText('+1', W - pad, H - pad + (small ? 12 : 16));
   ctx.fillText('−1', pad, H - pad + (small ? 12 : 16));
   ctx.textAlign = 'right';
-  ctx.fillText('Bob (B)', pad - (small ? 6 : 10), cy + 4);
+  ctx.fillText('B', pad - (small ? 6 : 10), cy + 4);
   ctx.fillText('+1', pad - 4, pad + 4);
   ctx.fillText('−1', pad - 4, H - pad + 4);
 
@@ -763,11 +767,11 @@ function renderPresenter() {
       <div class="header">
         <div>
           <h1>Laboratorio de <em>correlaciones</em></h1>
-          <div class="subtitle">Mediciones Bipartitas · Grupos A y B · ρ(A,B)</div>
+          <div class="subtitle">Demostración en vivo · Estadística de pares · ρ(A,B)</div>
         </div>
         <div class="meta">
           <span class="badge">EN VIVO</span><br>
-          <span id="modeLabel">Modo: correlación cuántica</span><br>
+          <span id="modeLabel">Modo: correlación positiva</span><br>
           Firebase · <span>conectado</span>
         </div>
       </div>
@@ -783,26 +787,26 @@ function renderPresenter() {
         <div class="stage">
           <div class="metrics">
             <div class="metric primary">
-              <div class="label">Entrelazamiento (Correlación)</div>
+              <div class="label">Coeficiente de correlación</div>
               <div class="value" id="rhoValue">+0.00</div>
               <div class="unit">ρ ∈ [−1 , +1]</div>
             </div>
             <div class="metric">
-              <div class="label">Pares completados</div>
+              <div class="label">Mediciones</div>
               <div class="value" id="countValue">0</div>
-              <div class="unit">coincidencias A ∩ B</div>
+              <div class="unit">pares (A, B)</div>
             </div>
             <div class="metric">
               <div class="label">Participantes</div>
               <div class="value" id="participantsValue">0</div>
-              <div class="unit">dispositivos únicos</div>
+              <div class="unit">dispositivos</div>
             </div>
           </div>
 
           <div class="plot-panel">
             <div class="plot-header">
               <div class="plot-title">Diagrama de dispersión · (A, B)</div>
-              <div class="plot-legend"><span>Punto visible solo cuando ambos grupos miden</span></div>
+              <div class="plot-legend"><span>cada punto = una medición</span></div>
             </div>
             <canvas id="scatter"></canvas>
           </div>
@@ -814,8 +818,8 @@ function renderPresenter() {
         <button class="mode-btn" data-mode="independent">Independiente</button>
         <button class="mode-btn" data-mode="positive">Correlación +</button>
         <button class="mode-btn" data-mode="negative">Correlación −</button>
-        <button class="mode-btn active" data-mode="quantum">«Cuántica»</button>
-        <button class="action-btn danger" id="resetBtn">Reiniciar experimento</button>
+        <button class="mode-btn" data-mode="quantum">«Cuántica»</button>
+        <button class="action-btn danger" id="resetBtn">Reiniciar datos</button>
       </div>
     </div>
   `;
@@ -835,7 +839,7 @@ function renderPresenter() {
     quantum: 'correlación «cuántica»'
   };
 
-  let currentConfig = { mode: 'quantum', resetAt: 0 };
+  let currentConfig = { mode: 'positive', resetAt: 0 };
   let allPoints = [];
 
   function setActiveMode(mode) {
@@ -849,38 +853,35 @@ function renderPresenter() {
     rhoEl.style.color = r > 0.15 ? 'var(--positive)' : (r < -0.15 ? 'var(--negative)' : 'var(--accent)');
     rhoEl.style.textShadow = `0 0 24px ${r > 0.15 ? 'rgba(74,222,128,0.45)' : (r < -0.15 ? 'rgba(244,114,182,0.45)' : 'var(--accent-glow)')}`;
     countEl.textContent = allPoints.length;
-    
-    const uids = new Set();
-    allPoints.forEach(p => { uids.add(p.uidA); uids.add(p.uidB); });
+    const uids = new Set(allPoints.map(p => p.uid));
     partEl.textContent = uids.size;
-    
     drawScatter(canvas, allPoints);
   }
 
   modeBtns.forEach(btn => {
     btn.addEventListener('click', async () => {
       try {
-        const newMode = btn.dataset.mode;
-        await set(configRef, { mode: newMode, resetAt: Date.now() });
-        await initSourcePool(newMode);
+        await set(configRef, { ...currentConfig, mode: btn.dataset.mode });
       } catch (e) { console.error(e); }
     });
   });
 
   resetBtn.addEventListener('click', async () => {
-    if (!confirm('¿Reiniciar la fuente y borrar las mediciones?')) return;
+    if (!confirm('¿Reiniciar todas las mediciones?')) return;
     try {
-      await set(configRef, { mode: currentConfig.mode, resetAt: Date.now() });
-      await initSourcePool(currentConfig.mode);
+      const newConfig = { ...currentConfig, resetAt: Date.now() };
+      await set(configRef, newConfig);
+      await remove(measurementsRef);
     } catch (e) { console.error(e); }
   });
 
+  // Suscripciones en tiempo real
   ensureConfig();
 
   onValue(configRef, (snap) => {
     const v = snap.val();
     if (v) {
-      currentConfig = { mode: v.mode || 'quantum', resetAt: v.resetAt || 0 };
+      currentConfig = { mode: v.mode || 'positive', resetAt: v.resetAt || 0 };
       setActiveMode(currentConfig.mode);
       allPoints = allPoints.filter(p => p.ts >= currentConfig.resetAt);
       updateDisplay();
@@ -888,7 +889,7 @@ function renderPresenter() {
   });
 
   onValue(measurementsRef, (snap) => {
-    allPoints = parseCompletedPairs(snap);
+    allPoints = snapshotToPoints(snap, currentConfig.resetAt);
     updateDisplay();
   });
 
@@ -896,33 +897,34 @@ function renderPresenter() {
 }
 
 // ============================================================
-// PARTICIPANTE (Pertenece al Grupo A o Grupo B)
+// PARTICIPANTE
 // ============================================================
 function renderParticipant() {
-  // Asignar aleatoriamente al participante al Grupo A (Alice) o Grupo B (Bob)
-  const myGroup = Math.random() < 0.5 ? 'A' : 'B';
-  const groupName = myGroup === 'A' ? 'Grupo A (Alice)' : 'Grupo B (Bob)';
-  const groupClass = myGroup === 'A' ? 'group-a' : 'group-b';
-  const btnClass = myGroup === 'A' ? '' : 'btn-b';
-  const colorHex = myGroup === 'A' ? '#00d4ff' : '#f472b6';
-
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="participant">
       <div class="p-header">
-        <div class="group-badge ${groupClass}">${groupName}</div>
-        <h1>Mide el espín <em>${myGroup}</em></h1>
-        <div class="sub">Se enviará a la pantalla para buscar su par entrelazado</div>
+        <h1>Mide un par <em>(A, B)</em></h1>
+        <div class="sub">Tu teléfono · Una medición a la vez</div>
       </div>
 
-      <button class="measure-btn ${btnClass}" id="measureBtn">
+      <button class="measure-btn" id="measureBtn">
         <span class="label">Toca aquí</span>
         MEDIR
       </button>
 
       <div class="last-result" id="lastResult" style="display:none">
-        <div class="label">Tu última medición (Partícula ${myGroup})</div>
-        <div class="reading-value" id="myReading" style="color: ${colorHex}">—</div>
+        <div class="label">Tu última medición</div>
+        <div class="pair">
+          <div class="reading">
+            <div class="reading-name">A</div>
+            <div class="reading-value" id="lastA">—</div>
+          </div>
+          <div class="reading">
+            <div class="reading-name">B</div>
+            <div class="reading-value" id="lastB">—</div>
+          </div>
+        </div>
       </div>
 
       <div class="p-stats">
@@ -931,30 +933,32 @@ function renderParticipant() {
           <div class="value" id="myCount">0</div>
         </div>
         <div class="p-stat">
-          <div class="label">Pares completados</div>
-          <div class="value accent" id="totalCount" style="color: ${colorHex}">0</div>
+          <div class="label">Total grupo</div>
+          <div class="value accent" id="totalCount">0</div>
         </div>
       </div>
 
       <div class="p-mini-plot">
-        <div class="title">Correlación global · ρ = <span id="miniRho">—</span></div>
+        <div class="title">Correlación del grupo · ρ = <span id="miniRho">—</span></div>
         <canvas id="miniScatter"></canvas>
       </div>
 
-      <div class="footnote">Demostración de entrelazamiento bipartito</div>
+      <div class="footnote">Demostración pedagógica · Firebase Realtime DB</div>
     </div>
     <div class="toast" id="toast"></div>
   `;
 
   const btn = document.getElementById('measureBtn');
   const lastResultEl = document.getElementById('lastResult');
-  const myReading = document.getElementById('myReading');
+  const lastA = document.getElementById('lastA');
+  const lastB = document.getElementById('lastB');
   const myCountEl = document.getElementById('myCount');
   const totalCountEl = document.getElementById('totalCount');
   const miniRho = document.getElementById('miniRho');
   const miniCanvas = document.getElementById('miniScatter');
   const toast = document.getElementById('toast');
 
+  let currentConfig = { mode: 'positive', resetAt: 0 };
   let allPoints = [];
   let myCount = 0;
 
@@ -977,37 +981,13 @@ function renderParticipant() {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
-      // 1. Obtener de forma segura el siguiente índice disponible para este grupo
-      const counterRef = ref(db, \`lab/counters/\${myGroup}\`);
-      let myIndex = 0;
-      await runTransaction(counterRef, (currentData) => {
-        myIndex = (currentData || 0);
-        return myIndex + 1;
-      });
-
-      // 2. Leer la partícula pre-generada desde la "fuente" central
-      const snap = await get(ref(db, \`lab/source/\${myIndex}\`));
-      const pair = snap.val();
-      
-      if (!pair) {
-        showToast('Fuente agotada. Pide un reinicio al profesor.');
-        return;
-      }
-
-      // 3. Tomar solo la mitad de la información
-      const myValue = myGroup === 'A' ? pair.a : pair.b;
-
-      // 4. Guardar la medición independiente
-      await set(ref(db, \`lab/measurements/\${myGroup}_\${myIndex}\`), {
-        val: myValue,
-        uid: USER_ID,
-        ts: Date.now()
-      });
-
-      myReading.textContent = (myValue >= 0 ? '+' : '') + myValue.toFixed(2);
+      const { a, b } = generatePair(currentConfig.mode);
+      const m = { ts: Date.now(), a, b, uid: USER_ID };
+      await push(measurementsRef, m);
+      lastA.textContent = (a >= 0 ? '+' : '') + a.toFixed(2);
+      lastB.textContent = (b >= 0 ? '+' : '') + b.toFixed(2);
       lastResultEl.style.display = 'block';
       if (navigator.vibrate) navigator.vibrate(30);
-
     } catch (err) {
       console.error(err);
       showToast('Error de conexión');
@@ -1016,15 +996,19 @@ function renderParticipant() {
     }
   });
 
-  onValue(measurementsRef, (snap) => {
-    const val = snap.val() || {};
-    let localCount = 0;
-    for (const k in val) {
-      if (val[k].uid === USER_ID) localCount++;
+  onValue(configRef, (snap) => {
+    const v = snap.val();
+    if (v) {
+      currentConfig = { mode: v.mode || 'positive', resetAt: v.resetAt || 0 };
+      allPoints = allPoints.filter(p => p.ts >= currentConfig.resetAt);
+      myCount = allPoints.filter(p => p.uid === USER_ID).length;
+      updateDisplay();
     }
-    myCount = localCount;
-    
-    allPoints = parseCompletedPairs(snap);
+  });
+
+  onValue(measurementsRef, (snap) => {
+    allPoints = snapshotToPoints(snap, currentConfig.resetAt);
+    myCount = allPoints.filter(p => p.uid === USER_ID).length;
     updateDisplay();
   });
 
