@@ -634,11 +634,11 @@ function generatePair(mode) {
   } else if (mode === 'negative') {
     b = clamp(-a + gauss(0.18), -1, 1);
   } else if (mode === 'quantum') {
+    // Estado entrelazado tipo Bell |Φ+⟩:
+    // resultados exactamente discretos en ±1 y perfectamente correlacionados.
+    // 50% de las veces (+1, +1), 50% de las veces (−1, −1). Nada en el medio.
     const sign = Math.random() < 0.5 ? 1 : -1;
-    const magnitude = 0.55 + Math.random() * 0.4;
-    const aQ = sign * magnitude + gauss(0.05);
-    const bQ = sign * magnitude + gauss(0.05);
-    return { a: clamp(aQ, -1, 1), b: clamp(bQ, -1, 1) };
+    return { a: sign, b: sign };
   } else {
     b = (Math.random() * 2) - 1;
   }
